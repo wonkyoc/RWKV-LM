@@ -1028,13 +1028,14 @@ class RWKV_CMix_x052_xzl(MyModule):
     # SVD + finetune: decomposed='r'
     # pretrain: decomposed='rkv'
     # (cf comments below
-    def __init__(self, args, layer_id, decomposed='r'):
+    __constants__ = ["decomposed"]
+    def __init__(self, args, layer_id, decomposed='rkv'):
         super().__init__()
         self.args = args
         self.layer_id = layer_id
         self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
         self.decomposed = decomposed
-
+        
         self.hasrelu = True
         if self.args.NoReLu:
             self.hasrelu = False
@@ -1084,35 +1085,35 @@ class RWKV_CMix_x052_xzl(MyModule):
         xx = self.time_shift(x) # xzl: also, mix with prev timestep (not all the way to the beginning
         xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
         xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
-        
-        if not 'k' in self.decomposed:
-            k = self.key(xk)
-        else: 
-            k = self.key1(xk)
-            if self.hasrelu:
-                k = torch.relu(k) ** 2
-            k = self.key2(k)
+
+        #if not 'k' in self.decomposed:
+        #    k = self.key(xk)
+        #else: 
+        k = self.key1(xk)
+        if self.hasrelu:
+            k = torch.relu(k) ** 2
+        k = self.key2(k)
 
         k = torch.relu(k) ** 2  #xzl: sqr relu, in original design 
 
-        if not 'v' in self.decomposed:
-            kv = self.value(k)
-        else: 
-            kv = self.value1(k)
-            if self.hasrelu:
-                kv = torch.relu(kv) ** 2        
-            kv = self.value2(kv)
+        #if not 'v' in self.decomposed:
+        #    kv = self.value(k)
+        #else: 
+        kv = self.value1(k)
+        if self.hasrelu:
+            kv = torch.relu(kv) ** 2        
+        kv = self.value2(kv)
 
         # Wr mod
-        if not 'r' in self.decomposed:
-            # Wr - orig
-            return torch.sigmoid(self.receptance(xr)) * kv
-        else: 
-            r = self.receptance1(xr)
-            if self.hasrelu:
-                r = torch.relu(r) ** 2
-            r = self.receptance2(r)
-            return torch.sigmoid(r) * kv
+        #if not 'r' in self.decomposed:
+        #    # Wr - orig
+        #    return torch.sigmoid(self.receptance(xr)) * kv
+        #else: 
+        r = self.receptance1(xr)
+        if self.hasrelu:
+            r = torch.relu(r) ** 2
+        r = self.receptance2(r)
+        return torch.sigmoid(r) * kv
             
 class RWKV_CMix_x060(MyModule):
     def __init__(self, args, layer_id):
@@ -1232,7 +1233,8 @@ class Block(nn.Module):
             self.ffn = RWKV_CMix_x060(args, layer_id)
         elif 'x052xzlNoReLu' in os.environ["RWKV_MY_TESTING"]:
             args.NoReLu=True
-            self.ffn = RWKV_CMix_x052_xzl(args, layer_id)            
+            self.ffn = RWKV_CMix_x052_xzl(args, layer_id)
+
         elif 'x052xzl' in os.environ["RWKV_MY_TESTING"]:
             self.ffn = RWKV_CMix_x052_xzl(args, layer_id)
         elif 'x052' in os.environ["RWKV_MY_TESTING"]:
